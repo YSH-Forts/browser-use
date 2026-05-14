@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Browser-Use Agent</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --text3: #6e7681;
+    --accent: #238636;
+    --accent2: #1f6feb;
+    --accent2-dim: #1f6feb33;
+    --danger: #da3633;
+    --warn: #d29922;
+    --step-bg: #0d1117;
+    --thinking: #3b1f5e;
+    --eval-good: #1a4d2e;
+    --eval-bad: #4d1a1a;
+    --mem: #1a3a4d;
+    --goal: #1a3d1a;
+    --code-bg: #161b22;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', 'SF Mono', Consolas, monospace;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ---- Top Bar ---- */
+  #topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #topbar h1 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.5px;
+  }
+  #topbar h1 span { color: var(--text3); font-weight: 400; }
+  .spacer { flex: 1; }
+  .status-badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    font-family: monospace;
+  }
+  .status-badge.running {
+    background: #1a4d2e;
+    border-color: var(--accent);
+    color: #3fb950;
+  }
+  .status-badge.done {
+    background: var(--bg3);
+    border-color: var(--accent);
+    color: #3fb950;
+  }
+  .status-badge.error {
+    background: #4d1a1a;
+    border-color: var(--danger);
+    color: #f85149;
+  }
+  .btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+  }
+  .btn:hover { background: #30363d; }
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: #2ea043; }
+  .btn-danger {
+    background: transparent;
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+  .btn-danger:hover { background: #da363322; }
+
+  /* ---- Main Layout ---- */
+  #main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ---- Left Panel: Task + Log ---- */
+  #left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    min-width: 0;
+  }
+  #task-section {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #task-section label {
+    font-size: 11px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    display: block;
+    margin-bottom: 6px;
+  }
+  #task-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'Segoe UI', monospace;
+    font-size: 13px;
+    padding: 8px 10px;
+    resize: vertical;
+    min-height: 80px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  #task-input:focus { border-color: var(--accent2); }
+  #task-input::placeholder { color: var(--text3); }
+  #task-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  #step-counter {
+    font-size: 11px;
+    color: var(--text3);
+    font-family: monospace;
+    align-self: center;
+  }
+
+  /* ---- Log Panel ---- */
+  #log-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #log-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 16px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  #log-header span {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text3);
+  }
+  .log-filter {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .log-filter.active {
+    background: var(--accent2-dim);
+    border-color: var(--accent2);
+    color: #58a6ff;
+  }
+  .spacer { flex: 1; }
+  #log-clear {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text3);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  #log-clear:hover { color: var(--text); border-color: var(--text3); }
+  #log-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+    scroll-behavior: smooth;
+  }
+  #log-content::-webkit-scrollbar { width: 6px; }
+  #log-content::-webkit-scrollbar-track { background: transparent; }
+  #log-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Step Card */
+  .step-card {
+    margin: 4px 12px 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 12px;
+  }
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+  .step-header:hover { background: var(--bg3); }
+  .step-num {
+    font-weight: 700;
+    color: var(--accent2);
+    font-size: 11px;
+    min-width: 36px;
+  }
+  .step-eval-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+  .step-eval-badge.success { background: var(--eval-good); color: #3fb950; }
+  .step-eval-badge.failure { background: var(--eval-bad); color: #f85149; }
+  .step-eval-badge.neutral { background: var(--bg3); color: var(--text2); }
+  .step-actions-summary {
+    flex: 1;
+    color: var(--text2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+  }
+  .step-body {
+    display: none;
+    padding: 8px 10px;
+  }
+  .step-body.open { display: block; }
+
+  /* Sections inside step */
+  .s-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text3);
+    margin: 6px 0 3px;
+  }
+  .s-thinking {
+    background: var(--thinking);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+    border-left: 3px solid #8b5cf6;
+  }
+  .s-eval {
+    background: var(--eval-good);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    color: #aff5b4;
+  }
+  .s-eval.failure { background: var(--eval-bad); color: #ffdcd7; }
+  .s-memory {
+    background: var(--mem);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    border-left: 3px solid #58a6ff;
+  }
+  .s-goal {
+    background: var(--goal);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    border-left: 3px solid #3fb950;
+  }
+  .s-actions { margin-top: 4px; }
+  .action-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--accent2-dim);
+    color: #58a6ff;
+    font-size: 11px;
+    margin: 2px 4px 2px 0;
+    border: 1px solid #1f6feb44;
+  }
+  .action-chip .action-name { font-weight: 600; }
+  .action-chip .action-params { color: #79c0ff; }
+  .s-url {
+    font-size: 11px;
+    color: var(--text3);
+    padding: 4px 0;
+    word-break: break-all;
+  }
+
+  /* Log meta entries */
+  .log-meta {
+    padding: 4px 16px;
+    font-size: 11px;
+    color: var(--text3);
+    border-bottom: 1px solid var(--border);
+  }
+  .log-meta.success { color: #3fb950; }
+  .log-meta.error { color: #f85149; }
+
+  /* Empty state */
+  #log-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text3);
+    font-size: 13px;
+    gap: 8px;
+  }
+  #log-empty .icon {
+    font-size: 36px;
+    opacity: 0.3;
+  }
+
+  /* ---- Right Panel: Skills ---- */
+  #right {
+    width: 320px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg2);
+    overflow: hidden;
+  }
+  #skills-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    gap: 8px;
+  }
+  #skills-header span {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text3);
+  }
+  #skills-count {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: var(--bg3);
+    color: var(--text3);
+    font-family: monospace;
+  }
+  .spacer { flex: 1; }
+  #skills-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+  #skills-list::-webkit-scrollbar { width: 4px; }
+  #skills-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .skill-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    position: relative;
+  }
+  .skill-card:hover {
+    border-color: var(--accent2);
+    background: var(--bg3);
+  }
+  .skill-card.selected {
+    border-color: var(--accent2);
+    background: var(--accent2-dim);
+  }
+  .skill-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .skill-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text3);
+    margin-top: 4px;
+  }
+  .skill-type {
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--bg3);
+    font-family: monospace;
+  }
+  .skill-type.navigate { background: #1a3d1a; color: #3fb950; }
+  .skill-type.click { background: #1a3a4d; color: #58a6ff; }
+  .skill-delete {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    border: none;
+    background: transparent;
+    color: var(--text3);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .skill-card:hover .skill-delete { display: flex; }
+  .skill-delete:hover { background: #da363322; color: var(--danger); }
+  .skill-edit-panel {
+    display: none;
+    margin-top: 8px;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }
+  .skill-card.editing .skill-edit-panel { display: block; }
+  .skill-edit-panel input,
+  .skill-edit-panel textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 5px 7px;
+    margin-bottom: 5px;
+    outline: none;
+  }
+  .skill-edit-panel input:focus,
+  .skill-edit-panel textarea:focus { border-color: var(--accent2); }
+  .skill-edit-panel textarea { resize: vertical; min-height: 48px; }
+  .skill-edit-panel .btn-row {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+  .skill-edit-panel .btn {
+    font-size: 11px;
+    padding: 4px 10px;
+  }
+  #skills-empty {
+    text-align: center;
+    padding: 40px 16px;
+    color: var(--text3);
+    font-size: 12px;
+  }
+  #compose-bar {
+    padding: 8px 14px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  #compose-bar input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 5px 8px;
+    outline: none;
+  }
+  #compose-bar input:focus { border-color: var(--accent2); }
+  #compose-bar .btn {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+  #selected-skills-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px 14px 0;
+    min-height: 20px;
+  }
+  .selected-skill-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--accent2-dim);
+    color: #58a6ff;
+    font-size: 10px;
+    border: 1px solid #1f6feb44;
+  }
+  .selected-skill-chip .remove {
+    cursor: pointer;
+    color: #79c0ff;
+    font-size: 12px;
+  }
+  .selected-skill-chip .remove:hover { color: #f85149; }
+
+  /* Loading spinner */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent2);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+  }
+
+  /* Notification toast */
+  #toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 13px;
+    color: var(--text);
+    z-index: 1000;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: transform 0.3s, opacity 0.3s;
+    max-width: 300px;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { border-color: var(--accent); }
+  #toast.error { border-color: var(--danger); }
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div id="topbar">
+  <h1>Browser-Use <span>/ Agent Control</span></h1>
+  <span id="model-info" class="status-badge">model: deepseek-chat</span>
+  <span id="status-badge" class="status-badge">idle</span>
+  <div class="spacer"></div>
+  <span id="step-counter">steps: 0</span>
+</div>
+
+<!-- Main -->
+<div id="main">
+
+  <!-- Left: Task + Log -->
+  <div id="left">
+    <div id="task-section">
+      <label>Task</label>
+      <textarea id="task-input" placeholder="Enter your task here...&#10;Example: Go to https://example.com and search for &quot;browser automation&quot;"></textarea>
+      <div id="task-actions">
+        <button id="btn-execute" class="btn btn-primary" onclick="executeTask()">
+          &#9654; Execute
+        </button>
+        <button id="btn-stop" class="btn btn-danger" onclick="stopTask()" style="display:none">
+          &#9632; Stop
+        </button>
+        <div class="spacer"></div>
+        <span id="task-status" style="font-size:11px;color:var(--text3);align-self:center"></span>
+      </div>
+    </div>
+
+    <div id="log-panel">
+      <div id="log-header">
+        <span>Execution Log</span>
+        <div style="display:flex;gap:4px">
+          <button class="log-filter active" data-filter="all" onclick="setFilter('all')">All</button>
+          <button class="log-filter" data-filter="thinking" onclick="setFilter('thinking')">Thinking</button>
+          <button class="log-filter" data-filter="actions" onclick="setFilter('actions')">Actions</button>
+          <button class="log-filter" data-filter="errors" onclick="setFilter('errors')">Errors</button>
+        </div>
+        <div class="spacer"></div>
+        <button id="log-clear" onclick="clearLog()">Clear</button>
+      </div>
+      <div id="log-content">
+        <div id="log-empty">
+          <div class="icon">&#128752;</div>
+          <div>Write a task above and click Execute</div>
+          <div style="font-size:11px;margin-top:4px">Model thinking and actions will appear here</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Skills -->
+  <div id="right">
+    <div id="skills-header">
+      <span>Skills</span>
+      <span id="skills-count">0</span>
+      <div class="spacer"></div>
+      <button class="btn" onclick="loadSkills()" style="font-size:11px;padding:3px 8px">&#8635; Refresh</button>
+    </div>
+    <div id="selected-skills-bar"></div>
+    <div id="skills-list">
+      <div id="skills-empty">No skills yet.<br>Complete successful steps to auto-generate skills.</div>
+    </div>
+    <div id="compose-bar">
+      <button class="btn btn-primary" onclick="composeFromSelected()" style="font-size:11px">Use Selected</button>
+      <input id="compose-task" placeholder="Task from selected skills will appear here..." readonly onclick="this.select()">
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+let currentSessionId = null;
+let evtSource = null;
+let currentFilter = 'all';
+let selectedSkillIds = new Set();
+let stepCount = 0;
+let taskRunning = false;
+
+// ============================================================================
+// Task Execution
+// ============================================================================
+
+async function executeTask() {
+  const input = document.getElementById('task-input');
+  const task = input.value.trim();
+  if (!task) { toast('Please enter a task', 'error'); return; }
+
+  if (taskRunning) { toast('A task is already running', 'error'); return; }
+
+  // Create session
+  let resp;
+  try {
+    resp = await fetch('/api/sessions', { method: 'POST' });
+    if (!resp.ok) throw new Error('Failed to create session');
+    const data = await resp.json();
+    currentSessionId = data.session_id;
+  } catch(e) { toast('Cannot create session: ' + e.message, 'error'); return; }
+
+  // Start SSE
+  startSSE(currentSessionId);
+
+  // Start execution
+  setStatus('running', 'starting...');
+  setTaskButtons(true);
+  document.getElementById('log-empty').style.display = 'none';
+
+  resp = await fetch(`/api/sessions/${currentSessionId}/execute`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({task}),
+  });
+  if (!resp.ok) { toast('Failed to start task', 'error'); stopSSE(); return; }
+}
+
+async function stopTask() {
+  if (!currentSessionId) return;
+  await fetch(`/api/sessions/${currentSessionId}/stop`, {method: 'POST'});
+}
+
+// ============================================================================
+// SSE Connection
+// ============================================================================
+
+function startSSE(sessionId) {
+  stopSSE();
+  evtSource = new EventSource(`/events/${sessionId}`);
+  evtSource.onmessage = (e) => {
+    // heartbeat - ignore (heartbeat events have a 'ts' field)
+    try {
+      const data = JSON.parse(e.data);
+      if (data && typeof data.ts !== 'undefined') return;
+    } catch (_) {}
+  };
+  evtSource.addEventListener('step', (e) => {
+    try { onStep(JSON.parse(e.data)); } catch(err) { console.error('step parse error:', err, e.data); }
+  });
+  evtSource.addEventListener('done', (e) => {
+    try { onDone(JSON.parse(e.data)); } catch(err) { console.error('done parse error:', err, e.data); }
+  });
+  evtSource.addEventListener('status', (e) => {
+    try { onStatus(JSON.parse(e.data)); } catch(err) { console.error('status parse error:', err, e.data); }
+  });
+  evtSource.addEventListener('error', (e) => {
+    try { onError(JSON.parse(e.data)); } catch(err) { console.error('error parse error:', err, e.data); }
+  });
+  evtSource.addEventListener('agent_info', (e) => {
+    try { onAgentInfo(JSON.parse(e.data)); } catch(err) { console.error('agent_info parse error:', err, e.data); }
+  });
+  evtSource.onerror = (e) => {
+    console.warn('SSE connection error, waiting for reconnect...', e);
+  };
+}
+
+function stopSSE() {
+  if (evtSource) { evtSource.close(); evtSource = null; }
+}
+
+// ============================================================================
+// SSE Event Handlers
+// ============================================================================
+
+function onAgentInfo(data) {
+  // nothing to do
+}
+
+function onStatus(data) {
+  const status = data.status;
+  if (status === 'running') {
+    setStatus('running', 'running');
+    setTaskButtons(true);
+    taskRunning = true;
+  } else if (status === 'done' || status === 'stopping') {
+    setStatus('done', 'done');
+    setTaskButtons(false);
+    taskRunning = false;
+    stopSSE();
+    loadSkills(currentSessionId);
+  }
+}
+
+function onStep(data) {
+  stepCount++;
+  document.getElementById('step-counter').textContent = `steps: ${stepCount}`;
+  renderStep(data);
+  scrollLog();
+}
+
+function onDone(data) {
+  setStatus('done', data.success ? 'success' : 'done');
+  setTaskButtons(false);
+  taskRunning = false;
+
+  const logContent = document.getElementById('log-content');
+  const div = document.createElement('div');
+  div.className = `log-meta ${data.success ? 'success' : ''}`;
+  div.innerHTML = `<strong>${data.success ? '&#10004; Task completed' : '&#9888; Task ended'}</strong> — ${data.final_result || ''} (${data.steps_taken} steps)`;
+  logContent.appendChild(div);
+  scrollLog();
+
+  if (data.new_skills && data.new_skills.length > 0) {
+    toast(`Generated ${data.new_skills.length} skill(s)`, 'success');
+  }
+
+  loadSkills(currentSessionId);
+  stopSSE();
+}
+
+function onError(data) {
+  setStatus('error', 'error');
+  setTaskButtons(false);
+  taskRunning = false;
+  const logContent = document.getElementById('log-content');
+  const div = document.createElement('div');
+  div.className = 'log-meta error';
+  div.textContent = 'Error: ' + data.message;
+  logContent.appendChild(div);
+  scrollLog();
+}
+
+// ============================================================================
+// Rendering
+// ============================================================================
+
+function renderStep(data) {
+  const logContent = document.getElementById('log-content');
+  const n = data.step;
+
+  // Determine eval style
+  let evalClass = 'neutral';
+  let evalText = data.evaluation || '';
+  if (evalText.toLowerCase().includes('success')) evalClass = 'success';
+  else if (evalText.toLowerCase().includes('fail') || evalText.toLowerCase().includes('error')) evalClass = 'failure';
+
+  // Build action chips
+  let actionChips = '';
+  for (const act of (data.actions || [])) {
+    const name = Object.keys(act)[0] || 'unknown';
+    const params = Object.values(act)[0] || {};
+    let paramStr = '';
+    if (params.url) paramStr = truncate(params.url, 40);
+    else if (params.index !== undefined) paramStr = `#${params.index}`;
+    else if (params.seconds !== undefined) paramStr = `${params.seconds}s`;
+    else if (params.text) paramStr = `"${truncate(params.text, 30)}"`;
+    actionChips += `<span class="action-chip"><span class="action-name">${name}</span>${paramStr ? `<span class="action-params">${paramStr}</span>` : ''}</span>`;
+  }
+
+  // Actions detail section
+  let actionsDetail = '';
+  if (data.actions && data.actions.length > 0) {
+    actionsDetail = `
+      <div class="s-label">Actions</div>
+      <div class="s-actions">${actionChips}</div>
+    `;
+  }
+
+  const card = document.createElement('div');
+  card.className = 'step-card';
+  card.dataset.step = n;
+  card.dataset.filter = [
+    data.thinking ? 'thinking' : '',
+    data.actions && data.actions.length ? 'actions' : '',
+    (data.evaluation || '').toLowerCase().includes('fail') ? 'errors' : '',
+  ].filter(Boolean).join(' ');
+
+  if (currentFilter !== 'all' && !card.dataset.filter.includes(currentFilter)) {
+    card.style.display = 'none';
+  }
+
+  card.innerHTML = `
+    <div class="step-header" onclick="toggleStep(this)">
+      <span class="step-num">Step ${n}</span>
+      ${evalText ? `<span class="step-eval-badge ${evalClass}">${truncate(evalText, 60)}</span>` : ''}
+      <span class="step-actions-summary">${actionChips || 'processing...'}</span>
+      <span style="color:var(--text3);font-size:11px">${data.url ? truncate(data.url, 30) : ''}</span>
+    </div>
+    <div class="step-body">
+      ${data.thinking ? `
+        <div class="s-label">Thinking</div>
+        <div class="s-thinking">${escapeHtml(data.thinking)}</div>
+      ` : ''}
+      ${data.evaluation ? `
+        <div class="s-label">Evaluation</div>
+        <div class="s-eval ${evalClass === 'failure' ? 'failure' : ''}">${escapeHtml(data.evaluation)}</div>
+      ` : ''}
+      ${data.memory ? `
+        <div class="s-label">Memory</div>
+        <div class="s-memory">${escapeHtml(data.memory)}</div>
+      ` : ''}
+      ${data.next_goal ? `
+        <div class="s-label">Next Goal</div>
+        <div class="s-goal">${escapeHtml(data.next_goal)}</div>
+      ` : ''}
+      ${actionsDetail}
+      ${data.url ? `<div class="s-url">URL: ${escapeHtml(data.url)}</div>` : ''}
+    </div>
+  `;
+  logContent.appendChild(card);
+}
+
+function toggleStep(header) {
+  header.nextElementSibling.classList.toggle('open');
+}
+
+function scrollLog() {
+  const lc = document.getElementById('log-content');
+  lc.scrollTop = lc.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('log-content').innerHTML = '';
+  document.getElementById('log-empty').style.display = 'flex';
+  stepCount = 0;
+  document.getElementById('step-counter').textContent = 'steps: 0';
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.log-filter').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === f);
+  });
+  document.querySelectorAll('.step-card').forEach(card => {
+    if (f === 'all') {
+      card.style.display = '';
+    } else {
+      card.style.display = card.dataset.filter.includes(f) ? '' : 'none';
+    }
+  });
+}
+
+// ============================================================================
+// Skills
+// ============================================================================
+
+async function loadSkills(sessionId) {
+  try {
+    const url = sessionId ? `/api/skills?session_id=${encodeURIComponent(sessionId)}` : '/api/skills';
+    const resp = await fetch(url);
+    const data = await resp.json();
+    renderSkills(data.skills || []);
+  } catch(e) { console.error(e); }
+}
+
+function renderSkills(skillList) {
+  document.getElementById('skills-count').textContent = skillList.length;
+  const list = document.getElementById('skills-list');
+  if (skillList.length === 0) {
+    list.innerHTML = '<div id="skills-empty">No skills yet.<br>Complete successful steps to auto-generate skills.</div>';
+    return;
+  }
+  list.innerHTML = skillList.map(s => `
+    <div class="skill-card ${selectedSkillIds.has(s.id) ? 'selected' : ''}" data-id="${s.id}" onclick="event.stopPropagation()">
+      <button class="skill-delete" onclick="deleteSkill('${s.id}')" title="Delete">&#215;</button>
+      <div class="skill-name" onclick="toggleSkillEdit('${s.id}', this)">${escapeHtml(s.name || s.description || 'Untitled')}</div>
+      <div class="skill-meta">
+        <span class="skill-type ${s.action_type || ''}">${s.action_type || 'unknown'}</span>
+        <span>${s.created_at ? s.created_at.slice(0,10) : ''}</span>
+        ${s.session_id ? `<button class="btn" style="font-size:10px;padding:1px 6px" onclick="saveSkillToCursor('${s.session_id}')" title="Save to .cursor/skills/">&#128452; Cursor</button>` : ''}
+      </div>
+      <div class="skill-edit-panel" id="edit-${s.id}">
+        <input type="text" id="ename-${s.id}" value="${escapeHtml(s.name || '')}" placeholder="Skill name">
+        <textarea id="edesc-${s.id}" placeholder="Description">${escapeHtml(s.description || '')}</textarea>
+        <div class="btn-row">
+          <button class="btn" onclick="cancelSkillEdit('${s.id}')">Cancel</button>
+          <button class="btn btn-primary" onclick="saveSkillEdit('${s.id}')">Save</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // Make cards selectable for composing tasks
+  list.querySelectorAll('.skill-name').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.onclick = (e) => {
+      e.stopPropagation();
+      const card = el.closest('.skill-card');
+      const id = card.dataset.id;
+      if (selectedSkillIds.has(id)) {
+        selectedSkillIds.delete(id);
+        card.classList.remove('selected');
+      } else {
+        selectedSkillIds.add(id);
+        card.classList.add('selected');
+      }
+      renderSelectedBar();
+    };
+  });
+}
+
+function toggleSkillEdit(id, el) {
+  // Don't toggle edit when clicking in the edit panel
+  const card = el.closest('.skill-card');
+  if (card.classList.contains('editing')) {
+    card.classList.remove('editing');
+  } else {
+    card.classList.add('editing');
+  }
+}
+
+function cancelSkillEdit(id) {
+  document.querySelector(`.skill-card[data-id="${id}"]`)?.classList.remove('editing');
+}
+
+async function saveSkillEdit(id) {
+  const name = document.getElementById(`ename-${id}`)?.value || '';
+  const desc = document.getElementById(`edesc-${id}`)?.value || '';
+  try {
+    const resp = await fetch(`/api/skills/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, description: desc}),
+    });
+    if (!resp.ok) throw new Error();
+    toast('Skill saved', 'success');
+    loadSkills(currentSessionId);
+  } catch(e) { toast('Failed to save skill', 'error'); }
+}
+
+async function deleteSkill(id) {
+  if (!confirm('Delete this skill?')) return;
+  try {
+    await fetch(`/api/skills/${id}`, {method: 'DELETE'});
+    selectedSkillIds.delete(id);
+    renderSelectedBar();
+    loadSkills(currentSessionId);
+    toast('Skill deleted', 'success');
+  } catch(e) { toast('Failed to delete', 'error'); }
+}
+
+async function saveSkillToCursor(sessionId) {
+  try {
+    const resp = await fetch(`/api/sessions/${sessionId}/save-as-skill`, {method: 'POST'});
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.detail || 'Failed');
+    }
+    const data = await resp.json();
+    toast(`Saved to .cursor/skills/${data.skill_id}/SKILL.md`, 'success');
+    loadSkills(currentSessionId);
+  } catch(e) { toast('Failed to save to Cursor: ' + e.message, 'error'); }
+}
+
+function renderSelectedBar() {
+  const bar = document.getElementById('selected-skills-bar');
+  const skillArray = Array.from(selectedSkillIds);
+  bar.innerHTML = skillArray.map(id => {
+    const card = document.querySelector(`.skill-card[data-id="${id}"]`);
+    const name = card ? card.querySelector('.skill-name').textContent : id;
+    return `<span class="selected-skill-chip">
+      ${truncate(name, 20)}
+      <span class="remove" onclick="event.stopPropagation();deselectSkill('${id}')">&#215;</span>
+    </span>`;
+  }).join('');
+}
+
+function deselectSkill(id) {
+  selectedSkillIds.delete(id);
+  document.querySelector(`.skill-card[data-id="${id}"]`)?.classList.remove('selected');
+  renderSelectedBar();
+}
+
+async function composeFromSelected() {
+  const ids = Array.from(selectedSkillIds);
+  if (ids.length === 0) { toast('Select skills first', 'error'); return; }
+  try {
+    const resp = await fetch('/api/skills/compose', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({skill_ids: ids}),
+    });
+    const data = await resp.json();
+    document.getElementById('compose-task').value = data.task || '';
+    document.getElementById('task-input').value = data.task || '';
+    toast(`Composed task from ${ids.length} skill(s)`, 'success');
+  } catch(e) { toast('Failed to compose task', 'error'); }
+}
+
+// ============================================================================
+// UI Helpers
+// ============================================================================
+
+function setStatus(state, text) {
+  const badge = document.getElementById('status-badge');
+  badge.className = 'status-badge ' + state;
+  badge.textContent = text;
+  const ts = document.getElementById('task-status');
+  if (state === 'running') ts.textContent = 'Agent is thinking...';
+  else if (state === 'done') ts.textContent = 'Done';
+  else if (state === 'error') ts.textContent = 'Error';
+  else ts.textContent = '';
+}
+
+function setTaskButtons(running) {
+  const execBtn = document.getElementById('btn-execute');
+  const stopBtn = document.getElementById('btn-stop');
+  if (running) {
+    execBtn.style.display = 'none';
+    stopBtn.style.display = '';
+  } else {
+    execBtn.style.display = '';
+    stopBtn.style.display = 'none';
+  }
+}
+
+function toast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = type ? `show ${type}` : 'show';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = ''; }, 3000);
+}
+
+// ============================================================================
+// Utilities
+// ============================================================================
+
+function truncate(str, len) {
+  if (!str) return '';
+  return str.length > len ? str.slice(0, len) + '...' : str;
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ============================================================================
+// Init
+// ============================================================================
+
+loadSkills();
+</script>
+</body>
+</html>

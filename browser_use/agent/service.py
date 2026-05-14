@@ -148,9 +148,10 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		sensitive_data: dict[str, str | dict[str, str]] | None = None,
 		initial_actions: list[dict[str, dict[str, Any]]] | None = None,
 		# Cloud Callbacks
+		# input_messages: list[BaseMessage] | None — last LLM input; raw_response: provider-native response | None
 		register_new_step_callback: (
-			Callable[['BrowserStateSummary', 'AgentOutput', int], None]  # Sync callback
-			| Callable[['BrowserStateSummary', 'AgentOutput', int], Awaitable[None]]  # Async callback
+			Callable[['BrowserStateSummary', 'AgentOutput', int, list[Any] | None, Any | None], None]  # noqa: N803
+			| Callable[['BrowserStateSummary', 'AgentOutput', int, list[Any] | None, Any | None], Awaitable[None]]  # noqa: N803
 			| None
 		) = None,
 		register_done_callback: (
@@ -1164,6 +1165,8 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 	async def _get_next_action(self, browser_state_summary: BrowserStateSummary) -> None:
 		"""Execute LLM interaction with retry logic and handle callbacks"""
 		input_messages = self._message_manager.get_messages()
+		# Store in state so callbacks (via _handle_post_llm_processing) can access them
+		self.state.input_messages = input_messages
 		self.logger.debug(
 			f'🤖 Step {self.state.n_steps}: Calling LLM with {len(input_messages)} messages (model: {self.llm.model})...'
 		)
@@ -1191,7 +1194,7 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		await self._check_stop_or_pause()
 
 		# Handle callbacks and conversation saving
-		await self._handle_post_llm_processing(browser_state_summary, input_messages)
+		await self._handle_post_llm_processing(browser_state_summary)
 
 		# check again if Ctrl+C was pressed before we commit the output to history
 		await self._check_stop_or_pause()
@@ -1693,34 +1696,40 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 	async def _handle_post_llm_processing(
 		self,
 		browser_state_summary: BrowserStateSummary,
-		input_messages: list[BaseMessage],
 	) -> None:
 		"""Handle callbacks and conversation saving after LLM interaction"""
-		if self.register_new_step_callback and self.state.last_model_output:
-			if inspect.iscoroutinefunction(self.register_new_step_callback):
-				await self.register_new_step_callback(
-					browser_state_summary,
-					self.state.last_model_output,
-					self.state.n_steps,
-				)
-			else:
-				self.register_new_step_callback(
-					browser_state_summary,
-					self.state.last_model_output,
-					self.state.n_steps,
-				)
+		if self.state.last_model_output:
+			input_messages = self.state.input_messages
+			raw_response = self.state.last_raw_response
+			if self.register_new_step_callback:
+				if inspect.iscoroutinefunction(self.register_new_step_callback):
+					await self.register_new_step_callback(
+						browser_state_summary,
+						self.state.last_model_output,
+						self.state.n_steps,
+						input_messages,
+						raw_response,
+					)
+				else:
+					self.register_new_step_callback(
+						browser_state_summary,
+						self.state.last_model_output,
+						self.state.n_steps,
+						input_messages,
+						raw_response,
+					)
 
-		if self.settings.save_conversation_path and self.state.last_model_output:
-			# Treat save_conversation_path as a directory (consistent with other recording paths)
-			conversation_dir = Path(self.settings.save_conversation_path)
-			conversation_filename = f'conversation_{self.id}_{self.state.n_steps}.txt'
-			target = conversation_dir / conversation_filename
-			await save_conversation(
-				input_messages,
-				self.state.last_model_output,
-				target,
-				self.settings.save_conversation_path_encoding,
-			)
+			if self.settings.save_conversation_path:
+				# Treat save_conversation_path as a directory (consistent with other recording paths)
+				conversation_dir = Path(self.settings.save_conversation_path)
+				conversation_filename = f'conversation_{self.id}_{self.state.n_steps}.txt'
+				target = conversation_dir / conversation_filename
+				await save_conversation(
+					input_messages,
+					self.state.last_model_output,
+					target,
+					self.settings.save_conversation_path_encoding,
+				)
 
 	async def _make_history_item(
 		self,
@@ -1931,15 +1940,13 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 	@observe_debug(ignore_input=True, ignore_output=True, name='get_model_output')
 	async def get_model_output(self, input_messages: list[BaseMessage]) -> AgentOutput:
 		"""Get next action from LLM based on current state"""
-
 		urls_replaced = self._process_messsages_and_replace_long_urls_shorter_ones(input_messages)
-
-		# Build kwargs for ainvoke
-		# Note: ChatBrowserUse will automatically generate action descriptions from output_format schema
 		kwargs: dict = {'output_format': self.AgentOutput, 'session_id': self.session_id}
 
 		try:
 			response = await self.llm.ainvoke(input_messages, **kwargs)
+			# Store raw response in state so callbacks can access usage + stop_reason
+			self.state.last_raw_response = response
 			parsed: AgentOutput = response.completion  # type: ignore[assignment]
 
 			# Replace any shortened URLs in the LLM response back to original URLs

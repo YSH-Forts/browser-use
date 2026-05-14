@@ -262,6 +262,12 @@ class AgentState(BaseModel):
 	plan_generation_step: int | None = None
 	last_model_output: AgentOutput | None = None
 
+	# Most recent LLM input messages — stored here so callbacks can access them
+	input_messages: list[Any] | None = None
+
+	# Most recent raw LLM response (provider-native ChatInvokeCompletion) — stored here so callbacks can access it
+	last_raw_response: Any | None = None
+
 	# Pause/resume state (kept serialisable for checkpointing)
 	paused: bool = False
 	stopped: bool = False
